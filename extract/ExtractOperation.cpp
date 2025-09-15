@@ -199,32 +199,30 @@ void ExtractOperation::extractFsConfigAndSelinuxLabelAndFsOptions() const {
     FILE *mkfsOptionFile = nullptr;
     char uuid[37] = {0};
 
-    const char *mountPointForContexts;
-    bool isSystemPartition = false;
-    
-    // If the image is a system partition, treat it as the root ("/").
-    if (imgBaseName == "system" || imgBaseName == "system_a" || imgBaseName == "system_b") {
-        mountPointForContexts = nullptr;  // Use nullptr instead of empty string
-        isSystemPartition = true;
-    } else {
-        // For all other partitions, use the partition name as the mount point.
-        mountPointForContexts = imgBaseName.c_str();
-    }
+    bool isSystemPartition = (imgBaseName == "system" || imgBaseName == "system_a" || imgBaseName == "system_b");
     
     LOGCI(BROWN "fs_config|file_contexts|fs_options" LOG_RESET_COLOR "  " GREEN2_BOLD "saving..." LOG_RESET_COLOR);
     if (fsConfigFile && selinuxLabelsFile) {
         for (auto &eNode: erofsNodes) {
             if (otherPathsInRootDir.count(eNode->getPath()) > 0) continue;
 
-            // For system partitions, don't prepend any mount point
             if (isSystemPartition) {
-                eNode->writeFsConfig2File(fsConfigFile, nullptr);
-                if (!eNode->getSelinuxLabel().empty())
-                    eNode->writeSelinuxLabel2File(selinuxLabelsFile, nullptr);
+                // For system partitions, manually create the paths without mount point
+                string configLine = eNode->getFsConfig();
+                string contextLine = eNode->getSelinuxLabel();
+                
+                if (!configLine.empty()) {
+                    fprintf(fsConfigFile, "%s\n", configLine.c_str());
+                }
+                
+                if (!contextLine.empty()) {
+                    fprintf(selinuxLabelsFile, "/%s %s\n", eNode->getPath().c_str(), contextLine.c_str());
+                }
             } else {
-                eNode->writeFsConfig2File(fsConfigFile, mountPointForContexts);
+                // For other partitions, use the existing methods
+                eNode->writeFsConfig2File(fsConfigFile, imgBaseName.c_str());
                 if (!eNode->getSelinuxLabel().empty())
-                    eNode->writeSelinuxLabel2File(selinuxLabelsFile, mountPointForContexts);
+                    eNode->writeSelinuxLabel2File(selinuxLabelsFile, imgBaseName.c_str());
             }
         }
 
