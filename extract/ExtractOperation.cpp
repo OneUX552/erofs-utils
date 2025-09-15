@@ -200,23 +200,32 @@ void ExtractOperation::extractFsConfigAndSelinuxLabelAndFsOptions() const {
     char uuid[37] = {0};
 
     const char *mountPointForContexts;
+    bool isSystemPartition = false;
+    
     // If the image is a system partition, treat it as the root ("/").
-    // This prevents duplicating the mount point in the path (e.g., "/system/system/app").
     if (imgBaseName == "system" || imgBaseName == "system_a" || imgBaseName == "system_b") {
-        mountPointForContexts = "";
+        mountPointForContexts = nullptr;  // Use nullptr instead of empty string
+        isSystemPartition = true;
     } else {
-        // For all other partitions (vendor, product, etc.), use the partition name as the mount point.
+        // For all other partitions, use the partition name as the mount point.
         mountPointForContexts = imgBaseName.c_str();
     }
-
+    
     LOGCI(BROWN "fs_config|file_contexts|fs_options" LOG_RESET_COLOR "  " GREEN2_BOLD "saving..." LOG_RESET_COLOR);
     if (fsConfigFile && selinuxLabelsFile) {
         for (auto &eNode: erofsNodes) {
             if (otherPathsInRootDir.count(eNode->getPath()) > 0) continue;
 
-            eNode->writeFsConfig2File(fsConfigFile, mountPointForContexts);
-            if (!eNode->getSelinuxLabel().empty())
-                eNode->writeSelinuxLabel2File(selinuxLabelsFile, mountPointForContexts);
+            // For system partitions, don't prepend any mount point
+            if (isSystemPartition) {
+                eNode->writeFsConfig2File(fsConfigFile, nullptr);
+                if (!eNode->getSelinuxLabel().empty())
+                    eNode->writeSelinuxLabel2File(selinuxLabelsFile, nullptr);
+            } else {
+                eNode->writeFsConfig2File(fsConfigFile, mountPointForContexts);
+                if (!eNode->getSelinuxLabel().empty())
+                    eNode->writeSelinuxLabel2File(selinuxLabelsFile, mountPointForContexts);
+            }
         }
 
         if (!isExtractTargetConfig) {
@@ -238,7 +247,7 @@ void ExtractOperation::extractFsConfigAndSelinuxLabelAndFsOptions() const {
                                       "%s",                 //input dir
                         isBigPcluster ? "-C 16384 " : "",     // default 16K
                         (uint64_t)g_sbi.build_time, uuid,
-                        imgBaseName.c_str(),
+                        imgBaseName.c_str(), 
                         fsConfigPath.c_str(), fsSelinuxLabelsPath.c_str(),
                         (imgBaseName + "_repack.img").c_str(),
                         outDir.c_str());
@@ -247,7 +256,7 @@ void ExtractOperation::extractFsConfigAndSelinuxLabelAndFsOptions() const {
         LOGCI(BROWN "fs_config|file_contexts|fs_options" LOG_RESET_COLOR "  " GREEN2_BOLD "done." LOG_RESET_COLOR);
     } else
         LOGCE(BROWN "fs_config|file_contexts|fs_options" LOG_RESET_COLOR "  " RED2_BOLD "fail!" LOG_RESET_COLOR);
-
+    
     if (fsConfigFile) fclose(fsConfigFile);
     if (selinuxLabelsFile) fclose(selinuxLabelsFile);
     if (mkfsOptionFile) fclose(mkfsOptionFile);
