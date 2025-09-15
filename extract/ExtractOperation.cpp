@@ -216,7 +216,18 @@ void ExtractOperation::extractFsConfigAndSelinuxLabelAndFsOptions() const {
                 }
                 
                 if (!contextLine.empty()) {
-                    fprintf(selinuxLabelsFile, "/%s %s\n", eNode->getPath().c_str(), contextLine.c_str());
+                    // Remove leading slash if present to avoid double slashes
+                    string path = eNode->getPath();
+                    if (!path.empty() && path[0] == '/') {
+                        path = path.substr(1);
+                    }
+                    
+                    if (path.empty()) {
+                        // This is the root directory
+                        fprintf(selinuxLabelsFile, "/ %s\n", contextLine.c_str());
+                    } else {
+                        fprintf(selinuxLabelsFile, "/%s %s\n", path.c_str(), contextLine.c_str());
+                    }
                 }
             } else {
                 // For other partitions, use the existing methods
