@@ -199,62 +199,41 @@ void ExtractOperation::extractFsConfigAndSelinuxLabelAndFsOptions() const {
     FILE *mkfsOptionFile = nullptr;
     char uuid[37] = {0};
 
-    bool isSystemPartition = (imgBaseName == "system" || imgBaseName == "system_a" || imgBaseName == "system_b");
+    const char *mountPoint = imgBaseName.c_str();
     
     LOGCI(BROWN "fs_config|file_contexts|fs_options" LOG_RESET_COLOR "  " GREEN2_BOLD "saving..." LOG_RESET_COLOR);
     if (fsConfigFile && selinuxLabelsFile) {
         for (auto &eNode: erofsNodes) {
             if (otherPathsInRootDir.count(eNode->getPath()) > 0) continue;
 
-            if (isSystemPartition) {
-                // For system partitions, handle fs_config and file_contexts differently
-                string configLine = eNode->getFsConfig();
-                string contextLine = eNode->getSelinuxLabel();
-                
-                // For fs_config, remove leading slash from path
-                if (!configLine.empty()) {
-                    // Extract the path part and remove leading slash
-                    size_t firstSpace = configLine.find(' ');
-                    if (firstSpace != string::npos) {
-                        string pathPart = configLine.substr(0, firstSpace);
-                        string rest = configLine.substr(firstSpace);
-                        
-                        // Remove leading slash if present
-                        if (!pathPart.empty() && pathPart[0] == '/') {
-                            pathPart = pathPart.substr(1);
-                        }
-                        
-                        // Handle special case for root directory
-                        if (pathPart.empty()) {
-                            fprintf(fsConfigFile, "%s\n", rest.c_str());
-                        } else {
-                            fprintf(fsConfigFile, "%s%s\n", pathPart.c_str(), rest.c_str());
-                        }
-                    } else {
-                        fprintf(fsConfigFile, "%s\n", configLine.c_str());
-                    }
-                }
-                
-                // For file_contexts, handle as before
-                if (!contextLine.empty()) {
-                    // Remove leading slash if present to avoid double slashes
-                    string path = eNode->getPath();
-                    if (!path.empty() && path[0] == '/') {
-                        path = path.substr(1);
+            // For fs_config, always remove leading slash from path
+            string configLine = eNode->getFsConfig();
+            if (!configLine.empty()) {
+                // Extract the path part and remove leading slash
+                size_t firstSpace = configLine.find(' ');
+                if (firstSpace != string::npos) {
+                    string pathPart = configLine.substr(0, firstSpace);
+                    string rest = configLine.substr(firstSpace);
+                    
+                    // Remove leading slash if present
+                    if (!pathPart.empty() && pathPart[0] == '/') {
+                        pathPart = pathPart.substr(1);
                     }
                     
-                    if (path.empty()) {
-                        // This is the root directory
-                        fprintf(selinuxLabelsFile, "/ %s\n", contextLine.c_str());
+                    // Handle special case for root directory
+                    if (pathPart.empty()) {
+                        fprintf(fsConfigFile, "%s\n", rest.c_str());
                     } else {
-                        fprintf(selinuxLabelsFile, "/%s %s\n", path.c_str(), contextLine.c_str());
+                        fprintf(fsConfigFile, "%s%s\n", pathPart.c_str(), rest.c_str());
                     }
+                } else {
+                    fprintf(fsConfigFile, "%s\n", configLine.c_str());
                 }
-            } else {
-                // For other partitions, use the existing methods
-                eNode->writeFsConfig2File(fsConfigFile, imgBaseName.c_str());
-                if (!eNode->getSelinuxLabel().empty())
-                    eNode->writeSelinuxLabel2File(selinuxLabelsFile, imgBaseName.c_str());
+            }
+            
+            // For file_contexts, use the standard method for all partitions
+            if (!eNode->getSelinuxLabel().empty()) {
+                eNode->writeSelinuxLabel2File(selinuxLabelsFile, mountPoint);
             }
         }
 
