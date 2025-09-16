@@ -207,14 +207,35 @@ void ExtractOperation::extractFsConfigAndSelinuxLabelAndFsOptions() const {
             if (otherPathsInRootDir.count(eNode->getPath()) > 0) continue;
 
             if (isSystemPartition) {
-                // For system partitions, manually create the paths without mount point
+                // For system partitions, handle fs_config and file_contexts differently
                 string configLine = eNode->getFsConfig();
                 string contextLine = eNode->getSelinuxLabel();
                 
+                // For fs_config, remove leading slash from path
                 if (!configLine.empty()) {
-                    fprintf(fsConfigFile, "%s\n", configLine.c_str());
+                    // Extract the path part and remove leading slash
+                    size_t firstSpace = configLine.find(' ');
+                    if (firstSpace != string::npos) {
+                        string pathPart = configLine.substr(0, firstSpace);
+                        string rest = configLine.substr(firstSpace);
+                        
+                        // Remove leading slash if present
+                        if (!pathPart.empty() && pathPart[0] == '/') {
+                            pathPart = pathPart.substr(1);
+                        }
+                        
+                        // Handle special case for root directory
+                        if (pathPart.empty()) {
+                            fprintf(fsConfigFile, "%s\n", rest.c_str());
+                        } else {
+                            fprintf(fsConfigFile, "%s%s\n", pathPart.c_str(), rest.c_str());
+                        }
+                    } else {
+                        fprintf(fsConfigFile, "%s\n", configLine.c_str());
+                    }
                 }
                 
+                // For file_contexts, handle as before
                 if (!contextLine.empty()) {
                     // Remove leading slash if present to avoid double slashes
                     string path = eNode->getPath();
